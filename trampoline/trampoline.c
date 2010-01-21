@@ -315,7 +315,11 @@ extern void __TR_clear_cache();
 #define TRAMP_BIAS 0
 #endif
 
-#if !defined(CODE_EXECUTABLE) && !defined(EXECUTABLE_VIA_MPROTECT)
+#if !defined(CODE_EXECUTABLE) && (!defined(EXECUTABLE_VIA_MPROTECT) || defined(HAVE_POSIX_MEMALIGN))
+#define USE_FREELIST
+#endif
+
+#ifdef USE_FREELIST
 /* AIX doesn't support mprotect() in malloc'ed memory. Must get pages of
  * memory with execute permission via mmap(). Then keep a free list of
  * free trampolines.
@@ -350,10 +354,14 @@ __TR_function alloc_trampoline (__TR_function address, void* variable, void* dat
 
   /* 1. Allocate room */
 
-#if !defined(CODE_EXECUTABLE) && !defined(EXECUTABLE_VIA_MPROTECT)
+#ifdef USE_FREELIST
   if (freelist == NULL)
     { /* Get a new page. */
       char* page;
+#ifdef HAVE_POSIX_MEMALIGN
+      if (posix_memalign((void**)&page, pagesize, pagesize) != 0)
+        { page = (char*)(-1); }
+#endif
 #ifdef EXECUTABLE_VIA_MMAP_ANONYMOUS
       page = mmap(0, pagesize, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_ANONYMOUS | MAP_VARIABLE, -1, 0);
 #endif
@@ -1302,7 +1310,7 @@ void free_trampoline (__TR_function function)
 #if TRAMP_BIAS
   function = (__TR_function)((char*)function - TRAMP_BIAS);
 #endif
-#if !defined(CODE_EXECUTABLE) && !defined(EXECUTABLE_VIA_MPROTECT)
+#ifdef USE_FREELIST
   *(char**)function = freelist; freelist = (char*)function;
   /* It is probably not worth calling munmap() for entirely freed pages. */
 #else

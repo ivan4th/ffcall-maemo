@@ -42,7 +42,7 @@ __builtin_avcall(av_alist* l)
   register double	dret	__asm__("r0");	/* r0,r1 */
 
   __avword space[__AV_ALIST_WORDS];	/* space for callee's stack frame */
-  __avword* argframe = sp;		/* stack offset for argument list */
+  __avword* argframe = space;		/* stack offset for argument list */
   int arglen = l->aptr - l->args;
   __avword i;
 

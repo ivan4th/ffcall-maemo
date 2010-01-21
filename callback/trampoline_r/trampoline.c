@@ -313,12 +313,38 @@ extern void __TR_clear_cache();
 
 #define TRAMP_TOTAL_LENGTH (TRAMP_LENGTH + 2*sizeof(void*))
 
-#if !defined(CODE_EXECUTABLE) && !defined(EXECUTABLE_VIA_MPROTECT)
+#if !defined(CODE_EXECUTABLE) && (!defined(EXECUTABLE_VIA_MPROTECT) || defined(HAVE_POSIX_MEMALIGN))
+#define USE_FREELIST
+#endif
+
+#ifdef USE_FREELIST
 /* AIX doesn't support mprotect() in malloc'ed memory. Must get pages of
  * memory with execute permission via mmap(). Then keep a free list of
  * free trampolines.
  */
 static char* freelist = NULL;
+#endif
+
+#ifdef __arm__
+/* Work arround a bad miscompilation issue with gcc 4.2.1:
+   freelist being updated after trampoline is built.
+   Call to a non-static function makes the compiler rethink
+   its optimization decisions. */
+void _vacall_r_fill_trampoline(char* function, __TR_function address, char* data)
+{
+  /* function:
+   *	add	r12,pc,#8			E28FC008
+   *	ldr	pc,[pc]				E59FF000
+   * _data:
+   *	.word	<data>
+   * _function:
+   *	.word	<address>
+   */
+  ((long *) function)[0] = 0xE28FC008;
+  ((long *) function)[1] = 0xE59FF000;
+  ((long *) function)[2] = (long) data;
+  ((long *) function)[3] = (long) address;
+}
 #endif
 
 __TR_function alloc_trampoline_r (__TR_function address, void* data0, void* data1)
@@ -349,7 +375,7 @@ __TR_function alloc_trampoline_r (__TR_function address, void* data0, void* data
 
   /* 1. Allocate room */
 
-#if !defined(CODE_EXECUTABLE) && !defined(EXECUTABLE_VIA_MPROTECT)
+#ifdef USE_FREELIST
   /* Note: This memory allocation is not multithread-safe. We might need
    * to add special (platform dependent) code for locking.
    * Fortunately, most modern systems where multithread-safety matters
@@ -360,6 +386,10 @@ __TR_function alloc_trampoline_r (__TR_function address, void* data0, void* data
   if (freelist == NULL)
     { /* Get a new page. */
       char* page;
+#ifdef HAVE_POSIX_MEMALIGN
+      if (posix_memalign((void**)&page, pagesize, pagesize) != 0)
+        { page = (char*)(-1); }
+#endif
 #ifdef EXECUTABLE_VIA_MMAP_ANONYMOUS
       page = mmap(0, pagesize, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_ANONYMOUS | MAP_VARIABLE, -1, 0);
 #endif
@@ -748,20 +778,7 @@ __TR_function alloc_trampoline_r (__TR_function address, void* data0, void* data
   ((long *) function)[2]
 #endif
 #ifdef __arm__
-  /* function:
-   *	add	r12,pc,#8			E28FC008
-   *	ldr	pc,[pc]				E59FF000
-   * _data:
-   *	.word	<data>
-   * _function:
-   *	.word	<address>
-   */
-  {
-    ((long *) function)[0] = 0xE28FC008;
-    ((long *) function)[1] = 0xE59FF000;
-    ((long *) function)[2] = (long) data;
-    ((long *) function)[3] = (long) address;
-  }
+  _vacall_r_fill_trampoline(function, address, data);
 #define is_tramp(function)  \
   ((long *) function)[0] == 0xE28FC008 && \
   ((long *) function)[1] == 0xE59FF000
@@ -1147,7 +1164,7 @@ void free_trampoline_r (__TR_function function)
 #if TRAMP_BIAS
   function = (__TR_function)((char*)function - TRAMP_BIAS);
 #endif
-#if !defined(CODE_EXECUTABLE) && !defined(EXECUTABLE_VIA_MPROTECT)
+#ifdef USE_FREELIST
   *(char**)function = freelist; freelist = (char*)function;
   /* It is probably not worth calling munmap() for entirely freed pages. */
 #else

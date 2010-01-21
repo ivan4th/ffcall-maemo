@@ -40,6 +40,9 @@
 /* Define to 1 if you have the `mprotect' function. */
 #undef HAVE_MPROTECT
 
+/* whether memalign() is available */
+#undef HAVE_POSIX_MEMALIGN
+
 /* have <sys/shm.h> and <sys/ipc.h> and shared memory works */
 #undef HAVE_SHM
 

@@ -9,11 +9,16 @@
  * on this software.
  */
 #include <linux/unistd.h>
+#include <sys/syscall.h>
 
 void __TR_clear_cache (char *first_addr, char *last_addr)
 {
-    register unsigned long _beg __asm ("a1") = first_addr;
-    register unsigned long _end __asm ("a2") = last_addr;
-    register unsigned long _flg __asm ("a3") = 0; 
-    __asm __volatile__ ("swi 0x9f0002" : : "r" (_beg), "r" (_end), "r" (_flg));
+  register unsigned long beg asm("a1") = first_addr;
+  register unsigned long end asm("a2") = last_addr;
+  register unsigned long flg asm("a3") = 0;
+  register unsigned long syscall_no asm("r7") = __ARM_NR_cacheflush;
+  asm volatile(
+               "swi 0x0"
+               : "=r" (beg)
+               : "0" (beg), "r" (end), "r" (flg), "r" (syscall_no));
 }
