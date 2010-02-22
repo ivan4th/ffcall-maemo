@@ -92,6 +92,15 @@ cl_cv_func_mmap_anonymous=yes, ,
 : # When cross-compiling, don't assume anything.
 )
 AC_TRY_RUN(GL_NOCRASH[$mmap_prog_1
+  int flags = MAP_ANONYMOUS | MAP_VARIABLE;
+  int fd = -1;
+  nocrash_init();
+$mmap_prog_2
+], have_mmap_var=1
+cl_cv_func_mmap_variable=yes, ,
+: # When cross-compiling, don't assume anything.
+)
+AC_TRY_RUN(GL_NOCRASH[$mmap_prog_1
 #ifndef MAP_FILE
 #define MAP_FILE 0
 #endif
@@ -132,6 +141,9 @@ AC_DEFINE([HAVE_MMAP_ANON],[],[<sys/mman.h> defines MAP_ANON and mmaping with MA
 fi
 if test "$cl_cv_func_mmap_anonymous" = yes; then
 AC_DEFINE([HAVE_MMAP_ANONYMOUS],[],[<sys/mman.h> defines MAP_ANONYMOUS and mmaping with MAP_ANONYMOUS works])
+fi
+if test "$cl_cv_func_mmap_variable" = yes; then
+AC_DEFINE([HAVE_MMAP_VARIABLE],[],[<sys/mman.h> defines MAP_VARIABLE and mmaping with MAP_ANONYMOUS | MAP_VARIABLE works])
 fi
 if test "$cl_cv_func_mmap_devzero" = yes; then
 AC_DEFINE([HAVE_MMAP_DEVZERO],[],[mmaping of the special device /dev/zero works])

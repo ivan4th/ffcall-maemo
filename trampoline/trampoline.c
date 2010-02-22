@@ -67,10 +67,6 @@ extern void (*tramp) (); /* trampoline prototype */
 
 #ifndef CODE_EXECUTABLE
 /* How do we make the trampoline's code executable? */
-#if defined(HAVE_MACH_VM) || defined(__convex__) || defined(HAVE_WORKING_MPROTECT) || defined(HAVE_SYS_M88KBCS_H)
-/* mprotect() [or equivalent] the malloc'ed area. */
-#define EXECUTABLE_VIA_MPROTECT
-#else
 #ifdef HAVE_MMAP
 /* Use an mmap'ed page. */
 #define EXECUTABLE_VIA_MMAP
@@ -87,7 +83,6 @@ extern void (*tramp) (); /* trampoline prototype */
 #define EXECUTABLE_VIA_SHM
 #else
 ??
-#endif
 #endif
 #endif
 #endif
@@ -115,29 +110,6 @@ extern RETGETPAGESIZETYPE getpagesize (void);
 #define PAGESIZE 4096
 #endif
 #define getpagesize() PAGESIZE
-#endif
-
-/* Declare mprotect() or equivalent. */
-#ifdef EXECUTABLE_VIA_MPROTECT
-#ifdef HAVE_MACH_VM
-#include <sys/resource.h>
-#include <mach/mach_interface.h>
-#ifdef NeXT
-#include <mach/mach_init.h>
-#endif
-#ifdef __osf__
-#include <mach_init.h>
-#endif
-#include <mach/machine/vm_param.h>
-#else
-#ifdef HAVE_SYS_M88KBCS_H
-#include <sys/m88kbcs.h>
-#define getpagesize()  4096  /* ?? */
-#else
-#include <sys/types.h>
-#include <sys/mman.h>
-#endif
-#endif
 #endif
 
 /* Declare mmap(). */
@@ -315,14 +287,14 @@ extern void __TR_clear_cache();
 #define TRAMP_BIAS 0
 #endif
 
-#if !defined(CODE_EXECUTABLE) && (!defined(EXECUTABLE_VIA_MPROTECT) || defined(HAVE_POSIX_MEMALIGN))
+#if !defined(CODE_EXECUTABLE)
 #define USE_FREELIST
 #endif
 
 #ifdef USE_FREELIST
-/* AIX doesn't support mprotect() in malloc'ed memory. Must get pages of
- * memory with execute permission via mmap(). Then keep a free list of
- * free trampolines.
+/* mprotect() on malloc'ed memory cannot be relied upon according to
+ * POSIX. Must get pages of memory with execute permission via mmap().
+ * Then keep a free list of free trampolines.
  */
 static char* freelist = NULL;
 #endif
@@ -358,12 +330,13 @@ __TR_function alloc_trampoline (__TR_function address, void* variable, void* dat
   if (freelist == NULL)
     { /* Get a new page. */
       char* page;
-#ifdef HAVE_POSIX_MEMALIGN
-      if (posix_memalign((void**)&page, pagesize, pagesize) != 0)
-        { page = (char*)(-1); }
-#endif
 #ifdef EXECUTABLE_VIA_MMAP_ANONYMOUS
-      page = mmap(0, pagesize, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_ANONYMOUS | MAP_VARIABLE, -1, 0);
+#ifdef HAVE_MMAP_VARIABLE
+#define MMAP_FLAGS MAP_ANONYMOUS | MAP_VARIABLE
+#else
+#define MMAP_FLAGS MAP_ANONYMOUS | MAP_PRIVATE
+#endif
+      page = mmap(0, pagesize, PROT_READ | PROT_WRITE | PROT_EXEC, MMAP_FLAGS, -1, 0);
 #endif
 #ifdef EXECUTABLE_VIA_MMAP_DEVZERO
       page = mmap(0, pagesize, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE, zero_fd, 0);
@@ -1172,34 +1145,6 @@ __TR_function alloc_trampoline (__TR_function address, void* variable, void* dat
   *(unsigned int *) (function +6)
 #define tramp_data(function)  \
   *(unsigned int *) (function +10)
-#endif
-
-  /* 3. Set memory protection to "executable" */
-
-#if !defined(CODE_EXECUTABLE) && defined(EXECUTABLE_VIA_MPROTECT)
-  /* Call mprotect on the pages that contain the range. */
-  { unsigned long start_addr = (unsigned long) function;
-    unsigned long end_addr = (unsigned long) (function + TRAMP_LENGTH);
-    start_addr = start_addr & -pagesize;
-    end_addr = (end_addr + pagesize-1) & -pagesize;
-   {unsigned long len = end_addr - start_addr;
-#if defined(HAVE_MACH_VM)
-    if (vm_protect(task_self(),start_addr,len,0,VM_PROT_READ|VM_PROT_WRITE|VM_PROT_EXECUTE) != KERN_SUCCESS)
-#else
-#if defined(__convex__)
-    /* Convex OS calls it `mremap()'. */
-    mremap(start_addr, &len, PROT_READ|PROT_WRITE|PROT_EXEC, MAP_PRIVATE);
-    if (0)
-#else
-#if defined(HAVE_SYS_M88KBCS_H)
-    if (memctl(start_addr, len, MCT_TEXT) == -1)
-#else
-    if (mprotect((void*)start_addr, len, PROT_READ|PROT_WRITE|PROT_EXEC) < 0)
-#endif
-#endif
-#endif
-      { fprintf(stderr,"trampoline: cannot make memory executable\n"); abort(); }
-  }}
 #endif
 
   /* 4. Flush instruction cache */

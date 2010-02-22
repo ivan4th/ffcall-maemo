@@ -3054,7 +3054,9 @@ _ACEOF
   fi
 
 
-   if false; then
+
+
+if false; then
   GL_COND_LIBTOOL_TRUE=
   GL_COND_LIBTOOL_FALSE='#'
 else

@@ -5255,6 +5255,142 @@ nocrash_init (void)
 }
 #endif
 $mmap_prog_1
+  int flags = MAP_ANONYMOUS | MAP_VARIABLE;
+  int fd = -1;
+  nocrash_init();
+$mmap_prog_2
+
+_ACEOF
+rm -f conftest$ac_exeext
+if { (ac_try="$ac_link"
+case "(($ac_try" in
+  *\"* | *\`* | *\\*) ac_try_echo=\$ac_try;;
+  *) ac_try_echo=$ac_try;;
+esac
+eval ac_try_echo="\"\$as_me:$LINENO: $ac_try_echo\""
+$as_echo "$ac_try_echo") >&5
+  (eval "$ac_link") 2>&5
+  ac_status=$?
+  $as_echo "$as_me:$LINENO: \$? = $ac_status" >&5
+  (exit $ac_status); } && { ac_try='./conftest$ac_exeext'
+  { (case "(($ac_try" in
+  *\"* | *\`* | *\\*) ac_try_echo=\$ac_try;;
+  *) ac_try_echo=$ac_try;;
+esac
+eval ac_try_echo="\"\$as_me:$LINENO: $ac_try_echo\""
+$as_echo "$ac_try_echo") >&5
+  (eval "$ac_try") 2>&5
+  ac_status=$?
+  $as_echo "$as_me:$LINENO: \$? = $ac_status" >&5
+  (exit $ac_status); }; }; then
+  have_mmap_var=1
+cl_cv_func_mmap_variable=yes
+else
+  $as_echo "$as_me: program exited with status $ac_status" >&5
+$as_echo "$as_me: failed program was:" >&5
+sed 's/^/| /' conftest.$ac_ext >&5
+
+fi
+rm -rf conftest.dSYM
+rm -f core *.core core.conftest.* gmon.out bb.out conftest$ac_exeext conftest.$ac_objext conftest.$ac_ext
+fi
+
+
+if test "$cross_compiling" = yes; then
+  : # When cross-compiling, don't assume anything.
+
+else
+  cat >conftest.$ac_ext <<_ACEOF
+/* confdefs.h.  */
+_ACEOF
+cat confdefs.h >>conftest.$ac_ext
+cat >>conftest.$ac_ext <<_ACEOF
+/* end confdefs.h.  */
+
+#include <stdlib.h>
+#if defined __MACH__ && defined __APPLE__
+/* Avoid a crash on MacOS X.  */
+#include <mach/mach.h>
+#include <mach/mach_error.h>
+#include <mach/thread_status.h>
+#include <mach/exception.h>
+#include <mach/task.h>
+#include <pthread.h>
+/* The exception port on which our thread listens.  */
+static mach_port_t our_exception_port;
+/* The main function of the thread listening for exceptions of type
+   EXC_BAD_ACCESS.  */
+static void *
+mach_exception_thread (void *arg)
+{
+  /* Buffer for a message to be received.  */
+  struct {
+    mach_msg_header_t head;
+    mach_msg_body_t msgh_body;
+    char data[1024];
+  } msg;
+  mach_msg_return_t retval;
+  /* Wait for a message on the exception port.  */
+  retval = mach_msg (&msg.head, MACH_RCV_MSG | MACH_RCV_LARGE, 0, sizeof (msg),
+                     our_exception_port, MACH_MSG_TIMEOUT_NONE, MACH_PORT_NULL);
+  if (retval != MACH_MSG_SUCCESS)
+    abort ();
+  exit (1);
+}
+static void
+nocrash_init (void)
+{
+  mach_port_t self = mach_task_self ();
+  /* Allocate a port on which the thread shall listen for exceptions.  */
+  if (mach_port_allocate (self, MACH_PORT_RIGHT_RECEIVE, &our_exception_port)
+      == KERN_SUCCESS) {
+    /* See http://web.mit.edu/darwin/src/modules/xnu/osfmk/man/mach_port_insert_right.html.  */
+    if (mach_port_insert_right (self, our_exception_port, our_exception_port,
+                                MACH_MSG_TYPE_MAKE_SEND)
+        == KERN_SUCCESS) {
+      /* The exceptions we want to catch.  Only EXC_BAD_ACCESS is interesting
+         for us.  */
+      exception_mask_t mask = EXC_MASK_BAD_ACCESS;
+      /* Create the thread listening on the exception port.  */
+      pthread_attr_t attr;
+      pthread_t thread;
+      if (pthread_attr_init (&attr) == 0
+          && pthread_attr_setdetachstate (&attr, PTHREAD_CREATE_DETACHED) == 0
+          && pthread_create (&thread, &attr, mach_exception_thread, NULL) == 0) {
+        pthread_attr_destroy (&attr);
+        /* Replace the exception port info for these exceptions with our own.
+           Note that we replace the exception port for the entire task, not only
+           for a particular thread.  This has the effect that when our exception
+           port gets the message, the thread specific exception port has already
+           been asked, and we don't need to bother about it.
+           See http://web.mit.edu/darwin/src/modules/xnu/osfmk/man/task_set_exception_ports.html.  */
+        task_set_exception_ports (self, mask, our_exception_port,
+                                  EXCEPTION_DEFAULT, MACHINE_THREAD_STATE);
+      }
+    }
+  }
+}
+#else
+/* Avoid a crash on POSIX systems.  */
+#include <signal.h>
+/* A POSIX signal handler.  */
+static void
+exception_handler (int sig)
+{
+  exit (1);
+}
+static void
+nocrash_init (void)
+{
+#ifdef SIGSEGV
+  signal (SIGSEGV, exception_handler);
+#endif
+#ifdef SIGBUS
+  signal (SIGBUS, exception_handler);
+#endif
+}
+#endif
+$mmap_prog_1
 #ifndef MAP_FILE
 #define MAP_FILE 0
 #endif
@@ -5468,6 +5604,13 @@ cat >>confdefs.h <<\_ACEOF
 _ACEOF
 
 fi
+if test "$cl_cv_func_mmap_variable" = yes; then
+
+cat >>confdefs.h <<\_ACEOF
+#define HAVE_MMAP_VARIABLE /**/
+_ACEOF
+
+fi
 if test "$cl_cv_func_mmap_devzero" = yes; then
 
 cat >>confdefs.h <<\_ACEOF
@@ -5482,757 +5625,6 @@ cat >>confdefs.h <<\_ACEOF
 _ACEOF
 
 fi
-fi
-fi
-
-
-for ac_func in mprotect
-do
-as_ac_var=`$as_echo "ac_cv_func_$ac_func" | $as_tr_sh`
-{ $as_echo "$as_me:$LINENO: checking for $ac_func" >&5
-$as_echo_n "checking for $ac_func... " >&6; }
-if { as_var=$as_ac_var; eval "test \"\${$as_var+set}\" = set"; }; then
-  $as_echo_n "(cached) " >&6
-else
-  cat >conftest.$ac_ext <<_ACEOF
-/* confdefs.h.  */
-_ACEOF
-cat confdefs.h >>conftest.$ac_ext
-cat >>conftest.$ac_ext <<_ACEOF
-/* end confdefs.h.  */
-/* Define $ac_func to an innocuous variant, in case <limits.h> declares $ac_func.
-   For example, HP-UX 11i <limits.h> declares gettimeofday.  */
-#define $ac_func innocuous_$ac_func
-
-/* System header to define __stub macros and hopefully few prototypes,
-    which can conflict with char $ac_func (); below.
-    Prefer <limits.h> to <assert.h> if __STDC__ is defined, since
-    <limits.h> exists even on freestanding compilers.  */
-
-#ifdef __STDC__
-# include <limits.h>
-#else
-# include <assert.h>
-#endif
-
-#undef $ac_func
-
-/* Override any GCC internal prototype to avoid an error.
-   Use char because int might match the return type of a GCC
-   builtin and then its argument prototype would still apply.  */
-#ifdef __cplusplus
-extern "C"
-#endif
-char $ac_func ();
-/* The GNU C library defines this for functions which it implements
-    to always fail with ENOSYS.  Some functions are actually named
-    something starting with __ and the normal name is an alias.  */
-#if defined __stub_$ac_func || defined __stub___$ac_func
-choke me
-#endif
-
-int
-main ()
-{
-return $ac_func ();
-  ;
-  return 0;
-}
-_ACEOF
-rm -f conftest.$ac_objext conftest$ac_exeext
-if { (ac_try="$ac_link"
-case "(($ac_try" in
-  *\"* | *\`* | *\\*) ac_try_echo=\$ac_try;;
-  *) ac_try_echo=$ac_try;;
-esac
-eval ac_try_echo="\"\$as_me:$LINENO: $ac_try_echo\""
-$as_echo "$ac_try_echo") >&5
-  (eval "$ac_link") 2>conftest.er1
-  ac_status=$?
-  grep -v '^ *+' conftest.er1 >conftest.err
-  rm -f conftest.er1
-  cat conftest.err >&5
-  $as_echo "$as_me:$LINENO: \$? = $ac_status" >&5
-  (exit $ac_status); } && {
-	 test -z "$ac_c_werror_flag" ||
-	 test ! -s conftest.err
-       } && test -s conftest$ac_exeext && {
-	 test "$cross_compiling" = yes ||
-	 $as_test_x conftest$ac_exeext
-       }; then
-  eval "$as_ac_var=yes"
-else
-  $as_echo "$as_me: failed program was:" >&5
-sed 's/^/| /' conftest.$ac_ext >&5
-
-	eval "$as_ac_var=no"
-fi
-
-rm -rf conftest.dSYM
-rm -f core conftest.err conftest.$ac_objext conftest_ipa8_conftest.oo \
-      conftest$ac_exeext conftest.$ac_ext
-fi
-ac_res=`eval 'as_val=${'$as_ac_var'}
-		 $as_echo "$as_val"'`
-	       { $as_echo "$as_me:$LINENO: result: $ac_res" >&5
-$as_echo "$ac_res" >&6; }
-as_val=`eval 'as_val=${'$as_ac_var'}
-		 $as_echo "$as_val"'`
-   if test "x$as_val" = x""yes; then
-  cat >>confdefs.h <<_ACEOF
-#define `$as_echo "HAVE_$ac_func" | $as_tr_cpp` 1
-_ACEOF
-
-fi
-done
-if test $ac_cv_func_mprotect = yes; then
-{ $as_echo "$as_me:$LINENO: checking for working mprotect" >&5
-$as_echo_n "checking for working mprotect... " >&6; }
-if test "${cl_cv_func_mprotect_works+set}" = set; then
-  $as_echo_n "(cached) " >&6
-else
-
-mprotect_prog='
-#include <sys/types.h>
-/* declare malloc() */
-#include <stdlib.h>
-#ifdef HAVE_UNISTD_H
-#include <unistd.h>
-#endif
-/* declare getpagesize() and mprotect() */
-#include <sys/mman.h>
-#ifndef HAVE_GETPAGESIZE
-#include <sys/param.h>
-#define getpagesize() PAGESIZE
-#else
-extern
-#ifdef __cplusplus
-"C"
-#endif
-
-RETGETPAGESIZETYPE getpagesize (void);
-#endif
-char foo;
-int main () {
-  unsigned long pagesize = getpagesize();
-#define page_align(address)  (char*)((unsigned long)(address) & -pagesize)
-'
-if test "$cross_compiling" = yes; then
-  # When cross-compiling, don't assume anything.
-no_mprotect=1
-else
-  cat >conftest.$ac_ext <<_ACEOF
-/* confdefs.h.  */
-_ACEOF
-cat confdefs.h >>conftest.$ac_ext
-cat >>conftest.$ac_ext <<_ACEOF
-/* end confdefs.h.  */
-$mprotect_prog
-  if ((pagesize-1) & pagesize) exit(1);
-  exit(0); }
-_ACEOF
-rm -f conftest$ac_exeext
-if { (ac_try="$ac_link"
-case "(($ac_try" in
-  *\"* | *\`* | *\\*) ac_try_echo=\$ac_try;;
-  *) ac_try_echo=$ac_try;;
-esac
-eval ac_try_echo="\"\$as_me:$LINENO: $ac_try_echo\""
-$as_echo "$ac_try_echo") >&5
-  (eval "$ac_link") 2>&5
-  ac_status=$?
-  $as_echo "$as_me:$LINENO: \$? = $ac_status" >&5
-  (exit $ac_status); } && { ac_try='./conftest$ac_exeext'
-  { (case "(($ac_try" in
-  *\"* | *\`* | *\\*) ac_try_echo=\$ac_try;;
-  *) ac_try_echo=$ac_try;;
-esac
-eval ac_try_echo="\"\$as_me:$LINENO: $ac_try_echo\""
-$as_echo "$ac_try_echo") >&5
-  (eval "$ac_try") 2>&5
-  ac_status=$?
-  $as_echo "$as_me:$LINENO: \$? = $ac_status" >&5
-  (exit $ac_status); }; }; then
-  :
-else
-  $as_echo "$as_me: program exited with status $ac_status" >&5
-$as_echo "$as_me: failed program was:" >&5
-sed 's/^/| /' conftest.$ac_ext >&5
-
-( exit $ac_status )
-no_mprotect=1
-fi
-rm -rf conftest.dSYM
-rm -f core *.core core.conftest.* gmon.out bb.out conftest$ac_exeext conftest.$ac_objext conftest.$ac_ext
-fi
-
-
-mprotect_prog="$mprotect_prog"'
-  char* area = (char*) malloc(6*pagesize);
-  char* fault_address = area + pagesize*7/2;
-'
-if test -z "$no_mprotect"; then
-if test "$cross_compiling" = yes; then
-  : # When cross-compiling, don't assume anything.
-
-else
-  cat >conftest.$ac_ext <<_ACEOF
-/* confdefs.h.  */
-_ACEOF
-cat confdefs.h >>conftest.$ac_ext
-cat >>conftest.$ac_ext <<_ACEOF
-/* end confdefs.h.  */
-
-#include <stdlib.h>
-#if defined __MACH__ && defined __APPLE__
-/* Avoid a crash on MacOS X.  */
-#include <mach/mach.h>
-#include <mach/mach_error.h>
-#include <mach/thread_status.h>
-#include <mach/exception.h>
-#include <mach/task.h>
-#include <pthread.h>
-/* The exception port on which our thread listens.  */
-static mach_port_t our_exception_port;
-/* The main function of the thread listening for exceptions of type
-   EXC_BAD_ACCESS.  */
-static void *
-mach_exception_thread (void *arg)
-{
-  /* Buffer for a message to be received.  */
-  struct {
-    mach_msg_header_t head;
-    mach_msg_body_t msgh_body;
-    char data[1024];
-  } msg;
-  mach_msg_return_t retval;
-  /* Wait for a message on the exception port.  */
-  retval = mach_msg (&msg.head, MACH_RCV_MSG | MACH_RCV_LARGE, 0, sizeof (msg),
-                     our_exception_port, MACH_MSG_TIMEOUT_NONE, MACH_PORT_NULL);
-  if (retval != MACH_MSG_SUCCESS)
-    abort ();
-  exit (1);
-}
-static void
-nocrash_init (void)
-{
-  mach_port_t self = mach_task_self ();
-  /* Allocate a port on which the thread shall listen for exceptions.  */
-  if (mach_port_allocate (self, MACH_PORT_RIGHT_RECEIVE, &our_exception_port)
-      == KERN_SUCCESS) {
-    /* See http://web.mit.edu/darwin/src/modules/xnu/osfmk/man/mach_port_insert_right.html.  */
-    if (mach_port_insert_right (self, our_exception_port, our_exception_port,
-                                MACH_MSG_TYPE_MAKE_SEND)
-        == KERN_SUCCESS) {
-      /* The exceptions we want to catch.  Only EXC_BAD_ACCESS is interesting
-         for us.  */
-      exception_mask_t mask = EXC_MASK_BAD_ACCESS;
-      /* Create the thread listening on the exception port.  */
-      pthread_attr_t attr;
-      pthread_t thread;
-      if (pthread_attr_init (&attr) == 0
-          && pthread_attr_setdetachstate (&attr, PTHREAD_CREATE_DETACHED) == 0
-          && pthread_create (&thread, &attr, mach_exception_thread, NULL) == 0) {
-        pthread_attr_destroy (&attr);
-        /* Replace the exception port info for these exceptions with our own.
-           Note that we replace the exception port for the entire task, not only
-           for a particular thread.  This has the effect that when our exception
-           port gets the message, the thread specific exception port has already
-           been asked, and we don't need to bother about it.
-           See http://web.mit.edu/darwin/src/modules/xnu/osfmk/man/task_set_exception_ports.html.  */
-        task_set_exception_ports (self, mask, our_exception_port,
-                                  EXCEPTION_DEFAULT, MACHINE_THREAD_STATE);
-      }
-    }
-  }
-}
-#else
-/* Avoid a crash on POSIX systems.  */
-#include <signal.h>
-/* A POSIX signal handler.  */
-static void
-exception_handler (int sig)
-{
-  exit (1);
-}
-static void
-nocrash_init (void)
-{
-#ifdef SIGSEGV
-  signal (SIGSEGV, exception_handler);
-#endif
-#ifdef SIGBUS
-  signal (SIGBUS, exception_handler);
-#endif
-}
-#endif
-$mprotect_prog
-  nocrash_init();
-  if (mprotect(page_align(fault_address),pagesize,PROT_NONE) < 0) exit(0);
-  foo = *fault_address; /* this should cause an exception or signal */
-  exit(0); }
-_ACEOF
-rm -f conftest$ac_exeext
-if { (ac_try="$ac_link"
-case "(($ac_try" in
-  *\"* | *\`* | *\\*) ac_try_echo=\$ac_try;;
-  *) ac_try_echo=$ac_try;;
-esac
-eval ac_try_echo="\"\$as_me:$LINENO: $ac_try_echo\""
-$as_echo "$ac_try_echo") >&5
-  (eval "$ac_link") 2>&5
-  ac_status=$?
-  $as_echo "$as_me:$LINENO: \$? = $ac_status" >&5
-  (exit $ac_status); } && { ac_try='./conftest$ac_exeext'
-  { (case "(($ac_try" in
-  *\"* | *\`* | *\\*) ac_try_echo=\$ac_try;;
-  *) ac_try_echo=$ac_try;;
-esac
-eval ac_try_echo="\"\$as_me:$LINENO: $ac_try_echo\""
-$as_echo "$ac_try_echo") >&5
-  (eval "$ac_try") 2>&5
-  ac_status=$?
-  $as_echo "$as_me:$LINENO: \$? = $ac_status" >&5
-  (exit $ac_status); }; }; then
-  no_mprotect=1
-else
-  $as_echo "$as_me: program exited with status $ac_status" >&5
-$as_echo "$as_me: failed program was:" >&5
-sed 's/^/| /' conftest.$ac_ext >&5
-
-fi
-rm -rf conftest.dSYM
-rm -f core *.core core.conftest.* gmon.out bb.out conftest$ac_exeext conftest.$ac_objext conftest.$ac_ext
-fi
-
-
-fi
-if test -z "$no_mprotect"; then
-if test "$cross_compiling" = yes; then
-  : # When cross-compiling, don't assume anything.
-
-else
-  cat >conftest.$ac_ext <<_ACEOF
-/* confdefs.h.  */
-_ACEOF
-cat confdefs.h >>conftest.$ac_ext
-cat >>conftest.$ac_ext <<_ACEOF
-/* end confdefs.h.  */
-
-#include <stdlib.h>
-#if defined __MACH__ && defined __APPLE__
-/* Avoid a crash on MacOS X.  */
-#include <mach/mach.h>
-#include <mach/mach_error.h>
-#include <mach/thread_status.h>
-#include <mach/exception.h>
-#include <mach/task.h>
-#include <pthread.h>
-/* The exception port on which our thread listens.  */
-static mach_port_t our_exception_port;
-/* The main function of the thread listening for exceptions of type
-   EXC_BAD_ACCESS.  */
-static void *
-mach_exception_thread (void *arg)
-{
-  /* Buffer for a message to be received.  */
-  struct {
-    mach_msg_header_t head;
-    mach_msg_body_t msgh_body;
-    char data[1024];
-  } msg;
-  mach_msg_return_t retval;
-  /* Wait for a message on the exception port.  */
-  retval = mach_msg (&msg.head, MACH_RCV_MSG | MACH_RCV_LARGE, 0, sizeof (msg),
-                     our_exception_port, MACH_MSG_TIMEOUT_NONE, MACH_PORT_NULL);
-  if (retval != MACH_MSG_SUCCESS)
-    abort ();
-  exit (1);
-}
-static void
-nocrash_init (void)
-{
-  mach_port_t self = mach_task_self ();
-  /* Allocate a port on which the thread shall listen for exceptions.  */
-  if (mach_port_allocate (self, MACH_PORT_RIGHT_RECEIVE, &our_exception_port)
-      == KERN_SUCCESS) {
-    /* See http://web.mit.edu/darwin/src/modules/xnu/osfmk/man/mach_port_insert_right.html.  */
-    if (mach_port_insert_right (self, our_exception_port, our_exception_port,
-                                MACH_MSG_TYPE_MAKE_SEND)
-        == KERN_SUCCESS) {
-      /* The exceptions we want to catch.  Only EXC_BAD_ACCESS is interesting
-         for us.  */
-      exception_mask_t mask = EXC_MASK_BAD_ACCESS;
-      /* Create the thread listening on the exception port.  */
-      pthread_attr_t attr;
-      pthread_t thread;
-      if (pthread_attr_init (&attr) == 0
-          && pthread_attr_setdetachstate (&attr, PTHREAD_CREATE_DETACHED) == 0
-          && pthread_create (&thread, &attr, mach_exception_thread, NULL) == 0) {
-        pthread_attr_destroy (&attr);
-        /* Replace the exception port info for these exceptions with our own.
-           Note that we replace the exception port for the entire task, not only
-           for a particular thread.  This has the effect that when our exception
-           port gets the message, the thread specific exception port has already
-           been asked, and we don't need to bother about it.
-           See http://web.mit.edu/darwin/src/modules/xnu/osfmk/man/task_set_exception_ports.html.  */
-        task_set_exception_ports (self, mask, our_exception_port,
-                                  EXCEPTION_DEFAULT, MACHINE_THREAD_STATE);
-      }
-    }
-  }
-}
-#else
-/* Avoid a crash on POSIX systems.  */
-#include <signal.h>
-/* A POSIX signal handler.  */
-static void
-exception_handler (int sig)
-{
-  exit (1);
-}
-static void
-nocrash_init (void)
-{
-#ifdef SIGSEGV
-  signal (SIGSEGV, exception_handler);
-#endif
-#ifdef SIGBUS
-  signal (SIGBUS, exception_handler);
-#endif
-}
-#endif
-$mprotect_prog
-  nocrash_init();
-  if (mprotect(page_align(fault_address),pagesize,PROT_NONE) < 0) exit(0);
-  *fault_address = 'z'; /* this should cause an exception or signal */
-  exit(0); }
-_ACEOF
-rm -f conftest$ac_exeext
-if { (ac_try="$ac_link"
-case "(($ac_try" in
-  *\"* | *\`* | *\\*) ac_try_echo=\$ac_try;;
-  *) ac_try_echo=$ac_try;;
-esac
-eval ac_try_echo="\"\$as_me:$LINENO: $ac_try_echo\""
-$as_echo "$ac_try_echo") >&5
-  (eval "$ac_link") 2>&5
-  ac_status=$?
-  $as_echo "$as_me:$LINENO: \$? = $ac_status" >&5
-  (exit $ac_status); } && { ac_try='./conftest$ac_exeext'
-  { (case "(($ac_try" in
-  *\"* | *\`* | *\\*) ac_try_echo=\$ac_try;;
-  *) ac_try_echo=$ac_try;;
-esac
-eval ac_try_echo="\"\$as_me:$LINENO: $ac_try_echo\""
-$as_echo "$ac_try_echo") >&5
-  (eval "$ac_try") 2>&5
-  ac_status=$?
-  $as_echo "$as_me:$LINENO: \$? = $ac_status" >&5
-  (exit $ac_status); }; }; then
-  no_mprotect=1
-else
-  $as_echo "$as_me: program exited with status $ac_status" >&5
-$as_echo "$as_me: failed program was:" >&5
-sed 's/^/| /' conftest.$ac_ext >&5
-
-fi
-rm -rf conftest.dSYM
-rm -f core *.core core.conftest.* gmon.out bb.out conftest$ac_exeext conftest.$ac_objext conftest.$ac_ext
-fi
-
-
-fi
-if test -z "$no_mprotect"; then
-if test "$cross_compiling" = yes; then
-  : # When cross-compiling, don't assume anything.
-
-else
-  cat >conftest.$ac_ext <<_ACEOF
-/* confdefs.h.  */
-_ACEOF
-cat confdefs.h >>conftest.$ac_ext
-cat >>conftest.$ac_ext <<_ACEOF
-/* end confdefs.h.  */
-
-#include <stdlib.h>
-#if defined __MACH__ && defined __APPLE__
-/* Avoid a crash on MacOS X.  */
-#include <mach/mach.h>
-#include <mach/mach_error.h>
-#include <mach/thread_status.h>
-#include <mach/exception.h>
-#include <mach/task.h>
-#include <pthread.h>
-/* The exception port on which our thread listens.  */
-static mach_port_t our_exception_port;
-/* The main function of the thread listening for exceptions of type
-   EXC_BAD_ACCESS.  */
-static void *
-mach_exception_thread (void *arg)
-{
-  /* Buffer for a message to be received.  */
-  struct {
-    mach_msg_header_t head;
-    mach_msg_body_t msgh_body;
-    char data[1024];
-  } msg;
-  mach_msg_return_t retval;
-  /* Wait for a message on the exception port.  */
-  retval = mach_msg (&msg.head, MACH_RCV_MSG | MACH_RCV_LARGE, 0, sizeof (msg),
-                     our_exception_port, MACH_MSG_TIMEOUT_NONE, MACH_PORT_NULL);
-  if (retval != MACH_MSG_SUCCESS)
-    abort ();
-  exit (1);
-}
-static void
-nocrash_init (void)
-{
-  mach_port_t self = mach_task_self ();
-  /* Allocate a port on which the thread shall listen for exceptions.  */
-  if (mach_port_allocate (self, MACH_PORT_RIGHT_RECEIVE, &our_exception_port)
-      == KERN_SUCCESS) {
-    /* See http://web.mit.edu/darwin/src/modules/xnu/osfmk/man/mach_port_insert_right.html.  */
-    if (mach_port_insert_right (self, our_exception_port, our_exception_port,
-                                MACH_MSG_TYPE_MAKE_SEND)
-        == KERN_SUCCESS) {
-      /* The exceptions we want to catch.  Only EXC_BAD_ACCESS is interesting
-         for us.  */
-      exception_mask_t mask = EXC_MASK_BAD_ACCESS;
-      /* Create the thread listening on the exception port.  */
-      pthread_attr_t attr;
-      pthread_t thread;
-      if (pthread_attr_init (&attr) == 0
-          && pthread_attr_setdetachstate (&attr, PTHREAD_CREATE_DETACHED) == 0
-          && pthread_create (&thread, &attr, mach_exception_thread, NULL) == 0) {
-        pthread_attr_destroy (&attr);
-        /* Replace the exception port info for these exceptions with our own.
-           Note that we replace the exception port for the entire task, not only
-           for a particular thread.  This has the effect that when our exception
-           port gets the message, the thread specific exception port has already
-           been asked, and we don't need to bother about it.
-           See http://web.mit.edu/darwin/src/modules/xnu/osfmk/man/task_set_exception_ports.html.  */
-        task_set_exception_ports (self, mask, our_exception_port,
-                                  EXCEPTION_DEFAULT, MACHINE_THREAD_STATE);
-      }
-    }
-  }
-}
-#else
-/* Avoid a crash on POSIX systems.  */
-#include <signal.h>
-/* A POSIX signal handler.  */
-static void
-exception_handler (int sig)
-{
-  exit (1);
-}
-static void
-nocrash_init (void)
-{
-#ifdef SIGSEGV
-  signal (SIGSEGV, exception_handler);
-#endif
-#ifdef SIGBUS
-  signal (SIGBUS, exception_handler);
-#endif
-}
-#endif
-$mprotect_prog
-  nocrash_init();
-  if (mprotect(page_align(fault_address),pagesize,PROT_READ) < 0) exit(0);
-  *fault_address = 'z'; /* this should cause an exception or signal */
-  exit(0); }
-_ACEOF
-rm -f conftest$ac_exeext
-if { (ac_try="$ac_link"
-case "(($ac_try" in
-  *\"* | *\`* | *\\*) ac_try_echo=\$ac_try;;
-  *) ac_try_echo=$ac_try;;
-esac
-eval ac_try_echo="\"\$as_me:$LINENO: $ac_try_echo\""
-$as_echo "$ac_try_echo") >&5
-  (eval "$ac_link") 2>&5
-  ac_status=$?
-  $as_echo "$as_me:$LINENO: \$? = $ac_status" >&5
-  (exit $ac_status); } && { ac_try='./conftest$ac_exeext'
-  { (case "(($ac_try" in
-  *\"* | *\`* | *\\*) ac_try_echo=\$ac_try;;
-  *) ac_try_echo=$ac_try;;
-esac
-eval ac_try_echo="\"\$as_me:$LINENO: $ac_try_echo\""
-$as_echo "$ac_try_echo") >&5
-  (eval "$ac_try") 2>&5
-  ac_status=$?
-  $as_echo "$as_me:$LINENO: \$? = $ac_status" >&5
-  (exit $ac_status); }; }; then
-  no_mprotect=1
-else
-  $as_echo "$as_me: program exited with status $ac_status" >&5
-$as_echo "$as_me: failed program was:" >&5
-sed 's/^/| /' conftest.$ac_ext >&5
-
-fi
-rm -rf conftest.dSYM
-rm -f core *.core core.conftest.* gmon.out bb.out conftest$ac_exeext conftest.$ac_objext conftest.$ac_ext
-fi
-
-
-fi
-if test -z "$no_mprotect"; then
-if test "$cross_compiling" = yes; then
-  : # When cross-compiling, don't assume anything.
-
-else
-  cat >conftest.$ac_ext <<_ACEOF
-/* confdefs.h.  */
-_ACEOF
-cat confdefs.h >>conftest.$ac_ext
-cat >>conftest.$ac_ext <<_ACEOF
-/* end confdefs.h.  */
-
-#include <stdlib.h>
-#if defined __MACH__ && defined __APPLE__
-/* Avoid a crash on MacOS X.  */
-#include <mach/mach.h>
-#include <mach/mach_error.h>
-#include <mach/thread_status.h>
-#include <mach/exception.h>
-#include <mach/task.h>
-#include <pthread.h>
-/* The exception port on which our thread listens.  */
-static mach_port_t our_exception_port;
-/* The main function of the thread listening for exceptions of type
-   EXC_BAD_ACCESS.  */
-static void *
-mach_exception_thread (void *arg)
-{
-  /* Buffer for a message to be received.  */
-  struct {
-    mach_msg_header_t head;
-    mach_msg_body_t msgh_body;
-    char data[1024];
-  } msg;
-  mach_msg_return_t retval;
-  /* Wait for a message on the exception port.  */
-  retval = mach_msg (&msg.head, MACH_RCV_MSG | MACH_RCV_LARGE, 0, sizeof (msg),
-                     our_exception_port, MACH_MSG_TIMEOUT_NONE, MACH_PORT_NULL);
-  if (retval != MACH_MSG_SUCCESS)
-    abort ();
-  exit (1);
-}
-static void
-nocrash_init (void)
-{
-  mach_port_t self = mach_task_self ();
-  /* Allocate a port on which the thread shall listen for exceptions.  */
-  if (mach_port_allocate (self, MACH_PORT_RIGHT_RECEIVE, &our_exception_port)
-      == KERN_SUCCESS) {
-    /* See http://web.mit.edu/darwin/src/modules/xnu/osfmk/man/mach_port_insert_right.html.  */
-    if (mach_port_insert_right (self, our_exception_port, our_exception_port,
-                                MACH_MSG_TYPE_MAKE_SEND)
-        == KERN_SUCCESS) {
-      /* The exceptions we want to catch.  Only EXC_BAD_ACCESS is interesting
-         for us.  */
-      exception_mask_t mask = EXC_MASK_BAD_ACCESS;
-      /* Create the thread listening on the exception port.  */
-      pthread_attr_t attr;
-      pthread_t thread;
-      if (pthread_attr_init (&attr) == 0
-          && pthread_attr_setdetachstate (&attr, PTHREAD_CREATE_DETACHED) == 0
-          && pthread_create (&thread, &attr, mach_exception_thread, NULL) == 0) {
-        pthread_attr_destroy (&attr);
-        /* Replace the exception port info for these exceptions with our own.
-           Note that we replace the exception port for the entire task, not only
-           for a particular thread.  This has the effect that when our exception
-           port gets the message, the thread specific exception port has already
-           been asked, and we don't need to bother about it.
-           See http://web.mit.edu/darwin/src/modules/xnu/osfmk/man/task_set_exception_ports.html.  */
-        task_set_exception_ports (self, mask, our_exception_port,
-                                  EXCEPTION_DEFAULT, MACHINE_THREAD_STATE);
-      }
-    }
-  }
-}
-#else
-/* Avoid a crash on POSIX systems.  */
-#include <signal.h>
-/* A POSIX signal handler.  */
-static void
-exception_handler (int sig)
-{
-  exit (1);
-}
-static void
-nocrash_init (void)
-{
-#ifdef SIGSEGV
-  signal (SIGSEGV, exception_handler);
-#endif
-#ifdef SIGBUS
-  signal (SIGBUS, exception_handler);
-#endif
-}
-#endif
-$mprotect_prog
-  nocrash_init();
-  if (mprotect(page_align(fault_address),pagesize,PROT_READ) < 0) exit(1);
-  if (mprotect(page_align(fault_address),pagesize,PROT_READ|PROT_WRITE) < 0) exit(1);
-  *fault_address = 'z'; /* this should not cause an exception or signal */
-  exit(0); }
-_ACEOF
-rm -f conftest$ac_exeext
-if { (ac_try="$ac_link"
-case "(($ac_try" in
-  *\"* | *\`* | *\\*) ac_try_echo=\$ac_try;;
-  *) ac_try_echo=$ac_try;;
-esac
-eval ac_try_echo="\"\$as_me:$LINENO: $ac_try_echo\""
-$as_echo "$ac_try_echo") >&5
-  (eval "$ac_link") 2>&5
-  ac_status=$?
-  $as_echo "$as_me:$LINENO: \$? = $ac_status" >&5
-  (exit $ac_status); } && { ac_try='./conftest$ac_exeext'
-  { (case "(($ac_try" in
-  *\"* | *\`* | *\\*) ac_try_echo=\$ac_try;;
-  *) ac_try_echo=$ac_try;;
-esac
-eval ac_try_echo="\"\$as_me:$LINENO: $ac_try_echo\""
-$as_echo "$ac_try_echo") >&5
-  (eval "$ac_try") 2>&5
-  ac_status=$?
-  $as_echo "$as_me:$LINENO: \$? = $ac_status" >&5
-  (exit $ac_status); }; }; then
-  :
-else
-  $as_echo "$as_me: program exited with status $ac_status" >&5
-$as_echo "$as_me: failed program was:" >&5
-sed 's/^/| /' conftest.$ac_ext >&5
-
-( exit $ac_status )
-no_mprotect=1
-fi
-rm -rf conftest.dSYM
-rm -f core *.core core.conftest.* gmon.out bb.out conftest$ac_exeext conftest.$ac_objext conftest.$ac_ext
-fi
-
-
-fi
-if test -z "$no_mprotect"; then
-  cl_cv_func_mprotect_works=yes
-else
-  cl_cv_func_mprotect_works=no
-fi
-
-fi
-{ $as_echo "$as_me:$LINENO: result: $cl_cv_func_mprotect_works" >&5
-$as_echo "$cl_cv_func_mprotect_works" >&6; }
-if test $cl_cv_func_mprotect_works = yes; then
-
-cat >>confdefs.h <<\_ACEOF
-#define HAVE_WORKING_MPROTECT /**/
-_ACEOF
-
 fi
 fi
 
@@ -6935,103 +6327,6 @@ _ACEOF
  ;;
   *no)  ;;
 esac
-
-
-{ $as_echo "$as_me:$LINENO: checking for posix_memalign" >&5
-$as_echo_n "checking for posix_memalign... " >&6; }
-if test "${ac_cv_func_posix_memalign+set}" = set; then
-  $as_echo_n "(cached) " >&6
-else
-  cat >conftest.$ac_ext <<_ACEOF
-/* confdefs.h.  */
-_ACEOF
-cat confdefs.h >>conftest.$ac_ext
-cat >>conftest.$ac_ext <<_ACEOF
-/* end confdefs.h.  */
-/* Define posix_memalign to an innocuous variant, in case <limits.h> declares posix_memalign.
-   For example, HP-UX 11i <limits.h> declares gettimeofday.  */
-#define posix_memalign innocuous_posix_memalign
-
-/* System header to define __stub macros and hopefully few prototypes,
-    which can conflict with char posix_memalign (); below.
-    Prefer <limits.h> to <assert.h> if __STDC__ is defined, since
-    <limits.h> exists even on freestanding compilers.  */
-
-#ifdef __STDC__
-# include <limits.h>
-#else
-# include <assert.h>
-#endif
-
-#undef posix_memalign
-
-/* Override any GCC internal prototype to avoid an error.
-   Use char because int might match the return type of a GCC
-   builtin and then its argument prototype would still apply.  */
-#ifdef __cplusplus
-extern "C"
-#endif
-char posix_memalign ();
-/* The GNU C library defines this for functions which it implements
-    to always fail with ENOSYS.  Some functions are actually named
-    something starting with __ and the normal name is an alias.  */
-#if defined __stub_posix_memalign || defined __stub___posix_memalign
-choke me
-#endif
-
-int
-main ()
-{
-return posix_memalign ();
-  ;
-  return 0;
-}
-_ACEOF
-rm -f conftest.$ac_objext conftest$ac_exeext
-if { (ac_try="$ac_link"
-case "(($ac_try" in
-  *\"* | *\`* | *\\*) ac_try_echo=\$ac_try;;
-  *) ac_try_echo=$ac_try;;
-esac
-eval ac_try_echo="\"\$as_me:$LINENO: $ac_try_echo\""
-$as_echo "$ac_try_echo") >&5
-  (eval "$ac_link") 2>conftest.er1
-  ac_status=$?
-  grep -v '^ *+' conftest.er1 >conftest.err
-  rm -f conftest.er1
-  cat conftest.err >&5
-  $as_echo "$as_me:$LINENO: \$? = $ac_status" >&5
-  (exit $ac_status); } && {
-	 test -z "$ac_c_werror_flag" ||
-	 test ! -s conftest.err
-       } && test -s conftest$ac_exeext && {
-	 test "$cross_compiling" = yes ||
-	 $as_test_x conftest$ac_exeext
-       }; then
-  ac_cv_func_posix_memalign=yes
-else
-  $as_echo "$as_me: failed program was:" >&5
-sed 's/^/| /' conftest.$ac_ext >&5
-
-	ac_cv_func_posix_memalign=no
-fi
-
-rm -rf conftest.dSYM
-rm -f core conftest.err conftest.$ac_objext conftest_ipa8_conftest.oo \
-      conftest$ac_exeext conftest.$ac_ext
-fi
-{ $as_echo "$as_me:$LINENO: result: $ac_cv_func_posix_memalign" >&5
-$as_echo "$ac_cv_func_posix_memalign" >&6; }
-if test "x$ac_cv_func_posix_memalign" = x""yes; then
-
-
-cat >>confdefs.h <<\_ACEOF
-#define HAVE_POSIX_MEMALIGN 1
-_ACEOF
-
-
-fi
-
 
 
 CPU_OBJECTS=''
