@@ -39,5 +39,3 @@ __va_error2 (unsigned int size)
   return 0;
 #endif
 }
-
-void (*__vacall_r_ptr)() = __vacall_r;

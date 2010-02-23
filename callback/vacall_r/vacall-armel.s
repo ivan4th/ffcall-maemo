@@ -1,120 +1,133 @@
 	.cpu arm10tdmi
 	.fpu softvfp
+	.eabi_attribute 20, 1
+	.eabi_attribute 21, 1
+	.eabi_attribute 23, 3
+	.eabi_attribute 24, 1
+	.eabi_attribute 25, 1
+	.eabi_attribute 26, 2
+	.eabi_attribute 30, 2
+	.eabi_attribute 18, 4
 	.file	"vacall-armel.c"
 	.text
 	.align	2
-	.global	__vacall_r
-	.type	__vacall_r, %function
-__vacall_r:
-	@ args = 4, pretend = 0, frame = 72
+	.type	__real_vacall_r, %function
+__real_vacall_r:
+	@ args = 4, pretend = 0, frame = 32
 	@ frame_needed = 0, uses_anonymous_args = 0
-	stmfd	sp!, {r4, r5, r6, r7, r8, lr}
-	sub	sp, sp, #72
-	add	r6, sp, #96
-	ldr	r4, [r6, #-4]
-	ldr	lr, [sp, #88]
-	str	r4, [sp, #32]
-	ldr	r4, [sp, #84]
-	str	lr, [sp, #36]
-	ldr	lr, [sp, #80]
-	mov	r5, #0
-	str	r4, [sp, #40]
-	ldr	r4, [sp, #76]
-	str	lr, [sp, #44]
-	str	r5, [sp, #8]
-	add	lr, sp, #80
-	str	r0, [sp, #80]
-	str	r1, [sp, #84]
-	str	r4, [sp, #48]
-	str	r2, [sp, #88]
-	mov	r7, r0
-	str	r3, [r6, #-4]
-	mov	r8, r1
-	str	lr, [sp, #4]
-	str	r0, [sp, #52]
-	str	r1, [sp, #56]
-	str	r5, [sp, #12]
-	str	r2, [sp, #60]
-	str	r3, [sp, #64]
-	str	r5, [sp, #0]
+	stmfd	sp!, {r4, r5, r6, r7, r8, r9, sl, lr}
+	sub	sp, sp, #32
+	mov	lr, #0
+	add	r9, sp, #48
+	str	lr, [sp, #12]
+	str	lr, [sp, #0]
+	stmib	sp, {r9, lr}	@ phole stm
+	add	r4, sp, #60
+	ldr	sl, [r4], #-4
+	ldr	r8, [sp, #56]
+	str	r3, [sp, #60]
+	str	r2, [sp, #56]
+	ldr	r7, [sp, #52]
+	ldr	r6, [sp, #48]
+	str	r1, [sp, #52]
+	str	r0, [sp, #48]
 	ldr	r0, [ip, #4]
 	mov	r1, sp
+	ldr	r5, [sp, #44]
 	mov	lr, pc
 	ldr	pc, [ip, #0]
-	ldr	lr, [sp, #12]
-	cmp	lr, r5
-	beq	.L3
-	cmp	lr, #1
-	beq	.L40
-	cmp	lr, #2
+	ldr	r2, [sp, #12]
+	cmp	r2, #0
+	beq	.L2
+	cmp	r2, #1
+	beq	.L39
+	cmp	r2, #2
 	ldreqsb	r0, [sp, #24]
-	beq	.L3
-	cmp	lr, #3
-	beq	.L40
-	cmp	lr, #4
+	beq	.L2
+	cmp	r2, #3
+	beq	.L39
+	cmp	r2, #4
 	ldreqsh	r0, [sp, #24]
-	beq	.L3
-	cmp	lr, #5
+	beq	.L2
+	cmp	r2, #5
 	ldreqh	r0, [sp, #24]
-	beq	.L3
-	cmp	lr, #6
-	beq	.L39
-	cmp	lr, #7
-	beq	.L39
-	cmp	lr, #8
-	beq	.L39
-	cmp	lr, #9
-	beq	.L39
-	sub	r3, lr, #10
+	beq	.L2
+	cmp	r2, #6
+	beq	.L43
+	cmp	r2, #7
+	beq	.L43
+	cmp	r2, #8
+	beq	.L43
+	cmp	r2, #9
+	beq	.L43
+	sub	r3, r2, #10
 	cmp	r3, #1
-	bls	.L38
-	cmp	lr, #12
+	bls	.L44
+	cmp	r2, #12
 	ldreq	r0, [sp, #24]	@ float
-	beq	.L3
-	cmp	lr, #13
-	beq	.L38
-	cmp	lr, #14
-	beq	.L39
-	cmp	lr, #15
-	bne	.L3
+	beq	.L2
+	cmp	r2, #13
+	beq	.L44
+	cmp	r2, #14
+	beq	.L43
+	cmp	r2, #15
+	bne	.L2
 	ldr	r3, [sp, #0]
 	tst	r3, #1
 	ldrne	r0, [sp, #8]
-	bne	.L3
+	bne	.L2
 	tst	r3, #1024
-	beq	.L3
+	beq	.L2
 	ldr	r3, [sp, #16]
 	cmp	r3, #1
-	ldreq	r3, [sp, #8]
-	ldreqb	r0, [r3, #0]	@ zero_extendqisi2
-	beq	.L3
+	beq	.L46
 	cmp	r3, #2
 	ldreq	r3, [sp, #8]
 	ldrne	r3, [sp, #8]
 	ldreqh	r0, [r3, #0]
 	ldrne	r0, [r3, #0]
-.L3:
-	ldr	r3, [sp, #32]
-	str	r3, [r6, #-4]
-	ldr	r2, [sp, #48]
-	str	r2, [r6, #-20]
-	ldr	r3, [sp, #36]
-	str	r3, [r6, #-8]
-	ldr	r2, [sp, #40]
-	str	r2, [r6, #-12]
-	ldr	r3, [sp, #44]
-	str	r3, [r6, #-16]
-	add	sp, sp, #72
-	ldmfd	sp!, {r4, r5, r6, r7, r8, pc}
-.L40:
-	ldrb	r0, [sp, #24]	@ zero_extendqisi2
-	b	.L3
+.L2:
+	str	sl, [sp, #60]
+	str	r8, [r4, #0]
+	str	r7, [sp, #52]
+	str	r6, [r9, #0]
+	str	r5, [sp, #44]
+	add	sp, sp, #32
+	ldmfd	sp!, {r4, r5, r6, r7, r8, r9, sl, pc}
 .L39:
+	ldrb	r0, [sp, #24]	@ zero_extendqisi2
+	b	.L2
+.L43:
 	ldr	r0, [sp, #24]
-	b	.L3
-.L38:
+	b	.L2
+.L44:
 	ldr	r0, [sp, #24]
 	ldr	r1, [sp, #28]
-	b	.L3
+	b	.L2
+.L46:
+	ldr	r3, [sp, #8]
+	ldrb	r0, [r3, #0]	@ zero_extendqisi2
+	b	.L2
+	.size	__real_vacall_r, .-__real_vacall_r
+	.align	2
+	.global	__vacall_r
+	.type	__vacall_r, %function
+__vacall_r:
+	@ args = 0, pretend = 0, frame = 0
+	@ frame_needed = 0, uses_anonymous_args = 0
+	@ link register save eliminated.
+	@ lr needed for prologue
+#APP
+	ldmfd sp!, {ip}
+	b __real_vacall_r
+	bx	lr
 	.size	__vacall_r, .-__vacall_r
-	.ident	"GCC: (GNU) 3.4.4 (release) (CodeSourcery ARM 2005q3-2)"
+	.global	__vacall_ptr__
+	.data
+	.align	2
+	.type	__vacall_ptr__, %object
+	.size	__vacall_ptr__, 4
+__vacall_ptr__:
+	.word	__real_vacall_r
+	.ident	"GCC: (GNU) 4.2.1"
+	.section	.note.GNU-stack,"",%progbits

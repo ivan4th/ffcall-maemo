@@ -29,8 +29,8 @@ typedef int (*function)();
 
 #if defined(__i386__)
 int f (void* env, int x)
-#else
-int f (int x)
+#elif defined(__arm__) && defined(__ARMEL__)
+int f (int x, int a1, int a2, int a3, void* env)
 #endif
 {
 #ifdef __GNUC__
@@ -59,7 +59,7 @@ register void* env __asm__("$1");
 #ifdef __hppa__
 register void* env __asm__("%r29");
 #endif
-#ifdef __arm__
+#if defined(__arm__) && !defined(__ARMEL__)
 register void* env __asm__("r12");
 #endif
 #ifdef __powerpc__

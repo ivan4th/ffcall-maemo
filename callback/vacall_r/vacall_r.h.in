@@ -1269,6 +1269,4 @@ extern void __structcpy (void* dest, const void* src, unsigned long size, unsign
 typedef union { __vaword room[__VA_ALIST_WORDS]; double align; } __va_struct_buffer_t;
 extern __va_struct_buffer_t __va_struct_buffer;
 
-extern void (*__vacall_r_ptr)();
-
 #endif /* _VACALL_R_H */

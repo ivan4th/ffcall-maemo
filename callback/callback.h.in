@@ -29,7 +29,7 @@ extern void* callback_data (void*);
 /* avoid problems with PLT trampoline that take place of external
    __vacall_r reference when libcallback is dynamically linked */
 #define alloc_callback(address,data)  \
-  alloc_trampoline_r((__TR_function)__vacall_r_ptr,(void*)(__VA_function)(address),(void*)(data))
+  alloc_trampoline_r((__TR_function)&__vacall_r,(void*)(__VA_function)(address),(void*)(data))
 #define free_callback(function)  \
   free_trampoline_r(function)
 #define is_callback(function)  \

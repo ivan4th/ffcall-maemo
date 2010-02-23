@@ -16,9 +16,12 @@
 #endif
 
 #ifdef REENTRANT
-#define __vacall __vacall_r
+#define __vacall __real_vacall_r
 register struct { void (*vacall_function) (void*,va_alist); void* arg; }
          *		env	__asm__("r12");
+#define _VACALL_STATIC static
+#else
+#define _VACALL_STATIC
 #endif
 
 /* armel have only softvfp which uses generic registers */
@@ -28,7 +31,7 @@ register float		fret	__asm__("r0");
 register __vaword	dret1	__asm__("r0");
 register __vaword	dret2	__asm__("r1");
 
-void /* the return type is variable, not void! */
+_VACALL_STATIC void /* the return type is variable, not void! */
 __vacall (__vaword word1, __vaword word2, __vaword word3, __vaword word4,
           __vaword firstword)
 {
@@ -132,3 +135,13 @@ __vacall (__vaword word1, __vaword word2, __vaword word3, __vaword word4,
   (&firstword)[-4] = args.sav3;
   (&firstword)[-5] = args.sav4;
 }
+
+#ifdef REENTRANT
+void __vacall_r ()
+{
+  __asm__("ldmfd sp!, {ip}\n\t"
+          "b __real_vacall_r");
+}
+
+void* __vacall_ptr__ = __real_vacall_r;
+#endif
