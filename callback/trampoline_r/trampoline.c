@@ -309,35 +309,6 @@ static char* freelist = NULL;
    its optimization decisions. */
 void _vacall_r_fill_trampoline(char* function, __TR_function address, char* data)
 {
-#ifdef __ARMEL__
-  /* function:
-   *	add	r12,pc,#12			E28FC00C
-   *	stmfd   sp!,{ip}			E92D1000
-   *	ldr	pc,[pc]				E59FF000
-   * _data:
-   *	.word	<data>
-   * _function:
-   *	.word	<address>
-   */
-  ((long *) function)[0] = 0xE28FC00C;
-  ((long *) function)[1] = 0xE92D1000;
-  ((long *) function)[2] = 0xE59FF000;
-  ((long *) function)[3] = (long) data;
-  ((long *) function)[4] = (long) address;
-#else
-  /* function:
-   *	add	r12,pc,#8			E28FC008
-   *	ldr	pc,[pc]				E59FF000
-   * _data:
-   *	.word	<data>
-   * _function:
-   *	.word	<address>
-   */
-  ((long *) function)[0] = 0xE28FC008;
-  ((long *) function)[1] = 0xE59FF000;
-  ((long *) function)[2] = (long) data;
-  ((long *) function)[3] = (long) address;
-#endif
 }
 #endif
 
@@ -775,8 +746,21 @@ __TR_function alloc_trampoline_r (__TR_function address, void* data0, void* data
   ((long *) function)[2]
 #endif
 #ifdef __arm__
-  _vacall_r_fill_trampoline(function, address, data);
 #ifdef __ARMEL__
+  /* function:
+   *	add	r12,pc,#12			E28FC00C
+   *	stmfd   sp!,{ip}			E92D1000
+   *	ldr	pc,[pc]				E59FF000
+   * _data:
+   *	.word	<data>
+   * _function:
+   *	.word	<address>
+   */
+  ((long *) function)[0] = 0xE28FC00C;
+  ((long *) function)[1] = 0xE92D1000;
+  ((long *) function)[2] = 0xE59FF000;
+  ((long *) function)[3] = (long) data;
+  ((long *) function)[4] = (long) address;
 #define is_tramp(function)  \
   ((long *) function)[0] == 0xE28FC00C && \
   ((long *) function)[1] == 0xE92D1000 && \
@@ -786,6 +770,18 @@ __TR_function alloc_trampoline_r (__TR_function address, void* data0, void* data
 #define tramp_data(function)  \
   ((long *) function)[3]
 #else
+  /* function:
+   *	add	r12,pc,#8			E28FC008
+   *	ldr	pc,[pc]				E59FF000
+   * _data:
+   *	.word	<data>
+   * _function:
+   *	.word	<address>
+   */
+  ((long *) function)[0] = 0xE28FC008;
+  ((long *) function)[1] = 0xE59FF000;
+  ((long *) function)[2] = (long) data;
+  ((long *) function)[3] = (long) address;
 #define is_tramp(function)  \
   ((long *) function)[0] == 0xE28FC008 && \
   ((long *) function)[1] == 0xE59FF000

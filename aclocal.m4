@@ -658,6 +658,18 @@ AC_EGREP_CPP(yes,[#ifdef __GNUC__
 if test $cl_cv_prog_cc_gcc = yes; then
   CC_GCC=true
   GCC_X_NONE='-x none'
+  AC_CACHE_CHECK(whether ${CC-cc} accepts -fno-strict-aliasing, cl_cv_prog_gcc_fno_strict_aliasing,
+[echo 'int main(){ return 0; }' > conftest.c
+if test -z "`${CC-cc} -c -fno-strict-aliasing conftest.c 2>&1`"; then
+  cl_cv_prog_gcc_fno_strict_aliasing=yes
+else
+  cl_cv_prog_gcc_fno_strict_aliasing=no
+fi
+rm -f conftest*
+])
+  if test $cl_cv_prog_gcc_fno_strict_aliasing = yes; then
+    CFLAGS="$CFLAGS -fno-strict-aliasing"
+  fi
 else
   CC_GCC=false
   GCC_X_NONE=''
