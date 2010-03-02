@@ -1,0 +1,92 @@
+#!/usr/bin/make -f
+# Sample debian/rules that uses debhelper.
+# GNU copyright 1997 to 1999 by Joey Hess.
+
+# Uncomment this to turn on verbose mode.
+#export DH_VERBOSE=1
+
+# This is the debhelper compatability version to use.
+export DH_COMPAT=4
+
+d	= debian/tmp
+
+p_lib	= libffcall1
+p_dev	= $(p_lib)-dev
+
+d_lib	= debian/$(p_lib)
+d_dev	= debian/$(p_dev)
+
+DEB_HOST_GNU_TYPE = $(shell dpkg-architecture -qDEB_HOST_GNU_TYPE)
+
+configure: configure-stamp
+configure-stamp:
+	dh_testdir
+	cp -p /usr/share/misc/config.* ffcall/autoconf/.
+	cd ffcall && \
+	    ./configure \
+		--prefix=/usr \
+		--mandir=\$${prefix}/share/man \
+		--infodir=\$${prefix}/usr/share/info \
+		--enable-shared \
+		--build=$(DEB_HOST_GNU_TYPE)
+	touch configure-stamp
+
+build: configure-stamp build-stamp
+build-stamp:
+	dh_testdir
+	$(MAKE) -C ffcall
+	: # CHECK
+	-$(MAKE) -C ffcall check
+	: # EXTRACHECK
+	-$(MAKE) -C ffcall extracheck
+	touch build-stamp
+
+clean:
+	dh_testdir
+	dh_testroot
+	rm -f build-stamp configure-stamp
+	-$(MAKE) -C ffcall distclean
+	rm -f ffcall/autoconf/config.sub ffcall/autoconf/config.guess
+	dh_clean
+
+install: build
+	dh_testdir
+	dh_testroot
+	dh_clean -k
+	dh_installdirs -p$(p_lib) \
+		usr/lib \
+		usr/share/doc/$(p_lib)
+	dh_installdirs -p$(p_dev) \
+		usr/lib \
+		usr/share/doc/$(p_dev) \
+		usr/include
+
+	mkdir -p $(d)/usr/share/man
+
+	$(MAKE) -C ffcall install prefix=`pwd`/$(d_dev)/usr
+	mv $(d_dev)/usr/lib/lib*.so.* $(d_lib)/usr/lib/.
+
+# Build architecture-independent files here.
+binary-indep: build install
+# We have nothing to do by default.
+
+# Build architecture-dependent files here.
+binary-arch: build install
+	dh_testdir
+	dh_testroot
+	dh_installdocs -p$(p_lib) \
+		ffcall/NEWS ffcall/README ffcall/PLATFORMS
+	dh_installdocs -p$(p_dev)
+	dh_installchangelogs
+	#dh_strip
+	dh_compress
+	dh_fixperms
+	dh_makeshlibs -p$(p_lib)
+	dh_installdeb
+	dh_shlibdeps
+	dh_gencontrol
+	dh_md5sums
+	dh_builddeb
+
+binary: binary-indep binary-arch
+.PHONY: build clean binary-indep binary-arch binary install configure

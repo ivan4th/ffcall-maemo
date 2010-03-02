@@ -1,0 +1,32 @@
+Source: ffcall
+Section: libdevel
+Priority: optional
+Maintainer: Hubert Chan <uhoreg@debian.org>
+Build-Depends: debhelper (>> 4.1), autotools-dev
+Standards-Version: 3.7.2
+
+Package: libffcall1-dev
+Architecture: any
+Depends: libffcall1 (= ${Source-Version}), libc6-dev | libc-dev
+Description: Foreign Function Call Libraries (development files)
+ This is a collection of four libraries which can be used to build
+ foreign function call interfaces in embedded interpreters.
+ .
+ The four packages are:
+ .
+    avcall - calling C functions with variable arguments
+ .
+    vacall - C functions accepting variable argument prototypes
+ .
+    trampoline - closures as first-class C functions
+ .
+    callback - closures with variable arguments as first-class C functions
+               (a reentrant combination of vacall and trampoline)
+
+Package: libffcall1
+Architecture: any
+Section: libs
+Depends: ${shlibs:Depends}
+Description: Foreign Function Call Libraries
+ This is a collection of four libraries which can be used to build
+ foreign function call interfaces in embedded interpreters.

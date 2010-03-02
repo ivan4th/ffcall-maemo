@@ -1,0 +1,7 @@
+The source for this package can be obtained by extracting the ffcall and src/m4
+directories from the clisp 2.41 tarball available at:
+  http://prdownloads.sourceforge.net/clisp/clisp-2.41.tar.gz
+
+The source from that tarball contains fixes for powerpc compilation, compared
+to the official upstream sources available at:
+  http://www.haible.de/bruno/packages-ffcall.html
